@@ -1,29 +1,6 @@
-# TroubleshootingEssentials
+# K8s_Troubleshooting_Guide
 
 This repository provides a comprehensive guide to troubleshooting Kubernetes applications, focusing on debugging a two-tier application (web frontend and MySQL database) and control plane issues. It covers steps to diagnose connectivity, pod issues, service configurations, environment variables, control plane components, and deployment problems, along with namespace management and autocompletion setup.
-
-## Changing the Default Namespace
-
-To troubleshoot in a specific namespace (e.g., `alpha`):
-```bash
-kubectl config set-context --current --namespace=alpha
-```
-
-Verify resources in the namespace:
-```bash
-kubectl describe deployment webapp-mysql
-kubectl describe service mysql-service
-```
-
-## Setting Up Autocompletion
-
-For easier command-line interaction, enable `kubectl` autocompletion:
-```bash
-alias k=kubectl
-source <(kubectl completion bash)
-complete -o default -F __start_kubectl k
-```
-Add these to your `~/.bashrc` or equivalent for persistence.
 
 ## 1. Troubleshooting Application Failure
 
@@ -121,88 +98,6 @@ The application is failing, and you need to troubleshoot accessibility and funct
    ```bash
    kubectl replace --force -f /path/to/filename.yaml
    ```
-### Deployment Not Running with Expected Pods
-
-#### Issue
-A deployment (e.g., `webapp-mysql`) does not create the expected number of pods or pods are in an unexpected state (e.g., `Pending`).
-
-#### Steps to Troubleshoot
-1. **Check Deployment Events**:
-   ```bash
-   kubectl describe deployment webapp-mysql
-   ```
-   Look for errors in scaling or pod creation.
-
-2. **Inspect ReplicaSet**:
-   ```bash
-   kubectl describe replicaset -l app=webapp-mysql
-   ```
-   Verify the ReplicaSet is managing the correct number of pods.
-
-3. **Check Pod Status**:
-   ```bash
-   kubectl describe pod -l app=webapp-mysql
-   ```
-   If pods are in `Pending` state, the `kube-scheduler` may have failed to assign a node.
-
-4. **Debug Kube-Scheduler**:
-   Check scheduler logs:
-   ```bash
-   kubectl describe pod kube-scheduler-<node-name> -n kube-system
-   kubectl logs kube-scheduler-<node-name> -n kube-system
-   ```
-   Look for scheduling errors (e.g., resource constraints, taints/tolerations).
-
-5. **Scaling Issues**:
-   If scaling (e.g., `kubectl scale deployment webapp-mysql --replicas=3`) doesn’t increase pod count, the `kube-controller-manager` may be failing:
-   ```bash
-   kubectl describe pod kube-controller-manager-<node-name> -n kube-system
-   kubectl logs kube-controller-manager-<node-name> -n kube-system
-   ```
-   - Check for errors like `file not found` for `controller-manager.conf`.
-   - Verify the configuration path (e.g., `/etc/kubernetes/controller-manager.conf`).
-
-6. **Fix Configuration**:
-   Update or correct paths in the control plane configuration files and restart affected services or pods.
-
-
-## Example Workflow
-1. **Application Failure**:
-   - Test web service accessibility:
-     ```bash
-     curl http://<node-ip>:30081
-     ```
-   - If it fails, check service and pod details:
-     ```bash
-     kubectl describe service web-service
-     kubectl describe pod -l app=webapp-mysql
-     kubectl logs -l app=webapp-mysql
-     ```
-   - Move to the database service and pod:
-     ```bash
-     kubectl describe service mysql-service
-     kubectl describe pod -l app=mysql
-     kubectl logs -l app=mysql
-     ```
-   - Fix issues like mismatched selectors, incorrect `DB_HOST`, or missing credentials in the ConfigMap.
-
-2. **Control Plane Failure**:
-   - Check node and pod status:
-     ```bash
-     kubectl get nodes
-     kubectl get pods -n kube-system
-     ```
-   - Inspect logs for control plane components and fix certificate or manifest path issues.
-
-3. **Deployment Issues**:
-   - Verify deployment, ReplicaSet, and pod events:
-     ```bash
-     kubectl describe deployment webapp-mysql
-     kubectl describe replicaset -l app=webapp-mysql
-     kubectl describe pod -l app=webapp-mysql
-     ```
-   - Debug scheduler or controller-manager logs if pods are pending or scaling fails.
-
 
 ## 2. Troubleshooting Control Plane Failure
 
@@ -264,6 +159,109 @@ The Kubernetes control plane is malfunctioning, affecting cluster operations.
    Refer to the official Kubernetes documentation for detailed debugging:
    - [Debugging a Kubernetes Cluster](https://kubernetes.io/docs/tasks/debug/debug-cluster/)
 
+### Deployment Not Running with Expected Pods
+
+#### Issue
+A deployment (e.g., `webapp-mysql`) does not create the expected number of pods or pods are in an unexpected state (e.g., `Pending`).
+
+#### Steps to Troubleshoot
+1. **Check Deployment Events**:
+   ```bash
+   kubectl describe deployment webapp-mysql
+   ```
+   Look for errors in scaling or pod creation.
+
+2. **Inspect ReplicaSet**:
+   ```bash
+   kubectl describe replicaset -l app=webapp-mysql
+   ```
+   Verify the ReplicaSet is managing the correct number of pods.
+
+3. **Check Pod Status**:
+   ```bash
+   kubectl describe pod -l app=webapp-mysql
+   ```
+   If pods are in `Pending` state, the `kube-scheduler` may have failed to assign a node.
+
+4. **Debug Kube-Scheduler**:
+   Check scheduler logs:
+   ```bash
+   kubectl describe pod kube-scheduler-<node-name> -n kube-system
+   kubectl logs kube-scheduler-<node-name> -n kube-system
+   ```
+   Look for scheduling errors (e.g., resource constraints, taints/tolerations).
+
+5. **Scaling Issues**:
+   If scaling (e.g., `kubectl scale deployment webapp-mysql --replicas=3`) doesn’t increase pod count, the `kube-controller-manager` may be failing:
+   ```bash
+   kubectl describe pod kube-controller-manager-<node-name> -n kube-system
+   kubectl logs kube-controller-manager-<node-name> -n kube-system
+   ```
+   - Check for errors like `file not found` for `controller-manager.conf`.
+   - Verify the configuration path (e.g., `/etc/kubernetes/controller-manager.conf`).
+
+6. **Fix Configuration**:
+   Update or correct paths in the control plane configuration files and restart affected services or pods.
+
+## Changing the Default Namespace
+
+To troubleshoot in a specific namespace (e.g., `alpha`):
+```bash
+kubectl config set-context --current --namespace=alpha
+```
+
+Verify resources in the namespace:
+```bash
+kubectl describe deployment webapp-mysql
+kubectl describe service mysql-service
+```
+
+## Setting Up Autocompletion
+
+For easier command-line interaction, enable `kubectl` autocompletion:
+```bash
+alias k=kubectl
+source <(kubectl completion bash)
+complete -o default -F __start_kubectl k
+```
+Add these to your `~/.bashrc` or equivalent for persistence.
+
+## Example Workflow
+1. **Application Failure**:
+   - Test web service accessibility:
+     ```bash
+     curl http://<node-ip>:30081
+     ```
+   - If it fails, check service and pod details:
+     ```bash
+     kubectl describe service web-service
+     kubectl describe pod -l app=webapp-mysql
+     kubectl logs -l app=webapp-mysql
+     ```
+   - Move to the database service and pod:
+     ```bash
+     kubectl describe service mysql-service
+     kubectl describe pod -l app=mysql
+     kubectl logs -l app=mysql
+     ```
+   - Fix issues like mismatched selectors, incorrect `DB_HOST`, or missing credentials in the ConfigMap.
+
+2. **Control Plane Failure**:
+   - Check node and pod status:
+     ```bash
+     kubectl get nodes
+     kubectl get pods -n kube-system
+     ```
+   - Inspect logs for control plane components and fix certificate or manifest path issues.
+
+3. **Deployment Issues**:
+   - Verify deployment, ReplicaSet, and pod events:
+     ```bash
+     kubectl describe deployment webapp-mysql
+     kubectl describe replicaset -l app=webapp-mysql
+     kubectl describe pod -l app=webapp-mysql
+     ```
+   - Debug scheduler or controller-manager logs if pods are pending or scaling fails.
 
 ## Conclusion
 Troubleshooting Kubernetes applications and control plane issues requires a systematic approach, from checking service accessibility and pod logs to verifying control plane components and deployment events. By validating configurations, selectors, environment variables, and control plane health, you can diagnose and resolve issues effectively. Tools like autocompletion and official documentation further streamline the process for managing complex Kubernetes clusters.
