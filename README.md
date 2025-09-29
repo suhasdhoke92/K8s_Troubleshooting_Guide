@@ -1,8 +1,31 @@
-# K8s_Troubleshooting_Guide
+# TroubleshootingEssentials
 
-This repository provides a comprehensive guide to troubleshooting Kubernetes applications, focusing on debugging a two-tier application with a web frontend and a MySQL database. It covers steps to diagnose connectivity, pod issues, service configurations, and environment variables, along with namespace management.
+This repository provides a comprehensive guide to troubleshooting Kubernetes applications, focusing on debugging a two-tier application (web frontend and MySQL database) and control plane issues. It covers steps to diagnose connectivity, pod issues, service configurations, environment variables, control plane components, and deployment problems, along with namespace management and autocompletion setup.
 
-## Troubleshooting Application Failure
+## Changing the Default Namespace
+
+To troubleshoot in a specific namespace (e.g., `alpha`):
+```bash
+kubectl config set-context --current --namespace=alpha
+```
+
+Verify resources in the namespace:
+```bash
+kubectl describe deployment webapp-mysql
+kubectl describe service mysql-service
+```
+
+## Setting Up Autocompletion
+
+For easier command-line interaction, enable `kubectl` autocompletion:
+```bash
+alias k=kubectl
+source <(kubectl completion bash)
+complete -o default -F __start_kubectl k
+```
+Add these to your `~/.bashrc` or equivalent for persistence.
+
+## 1. Troubleshooting Application Failure
 
 ### Scenario
 You have a two-tier application in Kubernetes:
@@ -20,9 +43,9 @@ The application is failing, and you need to troubleshoot accessibility and funct
 1. **Check Frontend Accessibility**:
    Start by testing the web frontend using the service's NodePort:
    ```bash
-   curl http://<web-service-ip>:30081
+   curl http://<node-ip>:30081
    ```
-   Replace `<web-service-ip>` with the cluster IP or node IP where the service is exposed.
+   Replace `<node-ip>` with the cluster node IP where the service is exposed.
 
 2. **Inspect the Web Service**:
    Verify the service configuration, selector, and endpoints:
@@ -98,38 +121,149 @@ The application is failing, and you need to troubleshoot accessibility and funct
    ```bash
    kubectl replace --force -f /path/to/filename.yaml
    ```
+### Deployment Not Running with Expected Pods
 
-## Changing the Default Namespace
+#### Issue
+A deployment (e.g., `webapp-mysql`) does not create the expected number of pods or pods are in an unexpected state (e.g., `Pending`).
 
-To troubleshoot in a specific namespace (e.g., `alpha`):
-```bash
-kubectl config set-context --current --namespace=alpha
-```
+#### Steps to Troubleshoot
+1. **Check Deployment Events**:
+   ```bash
+   kubectl describe deployment webapp-mysql
+   ```
+   Look for errors in scaling or pod creation.
 
-Verify resources in the namespace:
-```bash
-kubectl describe deployment webapp-mysql
-kubectl describe service mysql-service
-```
+2. **Inspect ReplicaSet**:
+   ```bash
+   kubectl describe replicaset -l app=webapp-mysql
+   ```
+   Verify the ReplicaSet is managing the correct number of pods.
+
+3. **Check Pod Status**:
+   ```bash
+   kubectl describe pod -l app=webapp-mysql
+   ```
+   If pods are in `Pending` state, the `kube-scheduler` may have failed to assign a node.
+
+4. **Debug Kube-Scheduler**:
+   Check scheduler logs:
+   ```bash
+   kubectl describe pod kube-scheduler-<node-name> -n kube-system
+   kubectl logs kube-scheduler-<node-name> -n kube-system
+   ```
+   Look for scheduling errors (e.g., resource constraints, taints/tolerations).
+
+5. **Scaling Issues**:
+   If scaling (e.g., `kubectl scale deployment webapp-mysql --replicas=3`) doesn’t increase pod count, the `kube-controller-manager` may be failing:
+   ```bash
+   kubectl describe pod kube-controller-manager-<node-name> -n kube-system
+   kubectl logs kube-controller-manager-<node-name> -n kube-system
+   ```
+   - Check for errors like `file not found` for `controller-manager.conf`.
+   - Verify the configuration path (e.g., `/etc/kubernetes/controller-manager.conf`).
+
+6. **Fix Configuration**:
+   Update or correct paths in the control plane configuration files and restart affected services or pods.
+
 
 ## Example Workflow
-1. Start with the web service accessibility:
+1. **Application Failure**:
+   - Test web service accessibility:
+     ```bash
+     curl http://<node-ip>:30081
+     ```
+   - If it fails, check service and pod details:
+     ```bash
+     kubectl describe service web-service
+     kubectl describe pod -l app=webapp-mysql
+     kubectl logs -l app=webapp-mysql
+     ```
+   - Move to the database service and pod:
+     ```bash
+     kubectl describe service mysql-service
+     kubectl describe pod -l app=mysql
+     kubectl logs -l app=mysql
+     ```
+   - Fix issues like mismatched selectors, incorrect `DB_HOST`, or missing credentials in the ConfigMap.
+
+2. **Control Plane Failure**:
+   - Check node and pod status:
+     ```bash
+     kubectl get nodes
+     kubectl get pods -n kube-system
+     ```
+   - Inspect logs for control plane components and fix certificate or manifest path issues.
+
+3. **Deployment Issues**:
+   - Verify deployment, ReplicaSet, and pod events:
+     ```bash
+     kubectl describe deployment webapp-mysql
+     kubectl describe replicaset -l app=webapp-mysql
+     kubectl describe pod -l app=webapp-mysql
+     ```
+   - Debug scheduler or controller-manager logs if pods are pending or scaling fails.
+
+
+## 2. Troubleshooting Control Plane Failure
+
+### Issue
+The Kubernetes control plane is malfunctioning, affecting cluster operations.
+
+### Steps to Troubleshoot
+
+1. **Check Node Status**:
+   Verify the health of cluster nodes:
    ```bash
-   curl http://<node-ip>:30081
+   kubectl get nodes
    ```
-2. If it fails, check the service and pod details:
+   Ensure all nodes are in the `Ready` state.
+
+2. **Inspect Control Plane Pods**:
+   Check the status of control plane components running in the `kube-system` namespace:
    ```bash
-   kubectl describe service web-service
-   kubectl describe pod -l app=webapp-mysql
-   kubectl logs -l app=webapp-mysql
+   kubectl get pods -n kube-system
    ```
-3. Move to the database service and pod:
+   Look for pods like `kube-apiserver`, `kube-controller-manager`, `kube-scheduler`, and `kube-proxy`.
+
+3. **Verify Control Plane Services** (if deployed as services on the host):
+   If control plane components are running as system services, check their status:
    ```bash
-   kubectl describe service mysql-service
-   kubectl describe pod -l app=mysql
-   kubectl logs -l app=mysql
+   sudo systemctl status kube-apiserver
+   sudo systemctl status kube-controller-manager
+   sudo systemctl status kube-scheduler
+   sudo systemctl status kubelet
+   sudo systemctl status kube-proxy
    ```
-4. Fix issues like mismatched selectors, incorrect `DB_HOST`, or missing credentials in the ConfigMap.
+
+4. **Check Logs**:
+   - For control plane pods:
+     ```bash
+     kubectl logs kube-apiserver-<node-name> -n kube-system
+     kubectl logs kube-controller-manager-<node-name> -n kube-system
+     kubectl logs kube-scheduler-<node-name> -n kube-system
+     ```
+   - For system services:
+     ```bash
+     sudo journalctl -u kube-apiserver
+     sudo journalctl -u kube-controller-manager
+     sudo journalctl -u kube-scheduler
+     ```
+
+5. **Common Issues**:
+   - **CA Certificate Error**: If logs show errors like `ca.crt not found`, verify the certificate path (e.g., `/etc/kubernetes/pki/ca.crt`) is correctly mounted:
+     ```bash
+     ls -l /etc/kubernetes/pki/
+     ```
+   - **Manifest Path**: Ensure control plane manifests exist:
+     ```bash
+     ls -l /etc/kubernetes/manifests/
+     ```
+     Fix missing or incorrect paths as needed.
+
+6. **Further Resources**:
+   Refer to the official Kubernetes documentation for detailed debugging:
+   - [Debugging a Kubernetes Cluster](https://kubernetes.io/docs/tasks/debug/debug-cluster/)
+
 
 ## Conclusion
-Troubleshooting Kubernetes applications requires a systematic approach, starting from service accessibility to pod and configuration checks. By verifying selectors, endpoints, logs, and environment variables, you can diagnose and resolve issues in a two-tier application like a web frontend and MySQL backend. Proper namespace management and corrective actions (e.g., updating ConfigMaps or reapplying YAML) ensure reliable application performance.
+Troubleshooting Kubernetes applications and control plane issues requires a systematic approach, from checking service accessibility and pod logs to verifying control plane components and deployment events. By validating configurations, selectors, environment variables, and control plane health, you can diagnose and resolve issues effectively. Tools like autocompletion and official documentation further streamline the process for managing complex Kubernetes clusters.
