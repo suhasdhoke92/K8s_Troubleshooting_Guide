@@ -1,6 +1,6 @@
-# K8s_Troubleshooting_Guide
+# TroubleshootingEssentials
 
-This repository provides a comprehensive guide to troubleshooting Kubernetes applications, focusing on debugging a two-tier application (web frontend and MySQL database) and control plane issues. It covers steps to diagnose connectivity, pod issues, service configurations, environment variables, control plane components, and deployment problems, along with namespace management and autocompletion setup.
+This repository provides a comprehensive guide to troubleshooting Kubernetes applications, control plane issues, and worker node failures. It covers debugging a two-tier application (web frontend and MySQL database), control plane components, deployment issues, and worker node problems, along with namespace management and autocompletion setup.
 
 ## 1. Troubleshooting Application Failure
 
@@ -203,6 +203,68 @@ A deployment (e.g., `webapp-mysql`) does not create the expected number of pods 
 6. **Fix Configuration**:
    Update or correct paths in the control plane configuration files and restart affected services or pods.
 
+## 3. Troubleshooting Worker Node Failure
+
+### Issue
+A worker node is malfunctioning, affecting pod scheduling or cluster operations.
+
+### Steps to Troubleshoot
+
+1. **Check Node Status**:
+   Verify the status of all nodes:
+   ```bash
+   kubectl get nodes
+   ```
+   Describe the affected worker node (e.g., `worker-1`):
+   ```bash
+   kubectl describe node worker-1
+   ```
+   Look for conditions like `OutOfDisk`, `MemoryPressure`, `DiskPressure`, `PIDPressure`, or `Ready` set to `False` or `Unknown`.
+
+2. **Investigate Node Issues**:
+   - **Unknown Status**: Indicates a possible node crash or network issue.
+   - **Resource Issues**: Check for high CPU, memory, or disk usage by logging into the node:
+     ```bash
+     ssh <node-ip>
+     top
+     df -h
+     ```
+   - Verify kubelet service status:
+     ```bash
+     sudo systemctl status kubelet
+     ```
+
+3. **Check Kubelet Logs**:
+   Inspect kubelet logs for errors:
+   ```bash
+   sudo journalctl -u kubelet
+   ```
+
+4. **Verify Kubelet Certificates**:
+   Ensure the kubelet certificate is valid and not expired:
+   ```bash
+   openssl x509 -in /var/lib/kubelet/kubelet.crt -text -noout
+   ```
+   - Check the certificate’s expiration date and issuer (should match the cluster’s CA).
+   - Verify the certificate path in `/etc/kubernetes/kubelet.conf` or `/var/lib/kubelet/config.yaml`.
+
+5. **Check API Server Connectivity**:
+   If logs indicate the kubelet is trying to connect to the wrong API server port (e.g., 6553 instead of 6443), update the kubelet configuration:
+   - Edit `/etc/kubernetes/kubelet.conf` or `/var/lib/kubelet/config.yaml`.
+   - Ensure the `server` field points to the correct API server address and port (e.g., `https://<control-plane-ip>:6443`).
+   - Verify the CA certificate path in `config.yaml`:
+     ```yaml
+     clusterCAFile: /etc/kubernetes/pki/ca.crt
+     ```
+   - Restart kubelet:
+     ```bash
+     sudo systemctl restart kubelet
+     ```
+
+6. **Further Resources**:
+   Refer to the Kubernetes CKA Troubleshooting Guide for detailed steps:
+   - [Kubernetes CKA Troubleshooting PDF](https://att-c.udemycdn.com/2022-06-03_04-37-44-661251794b1c0b279794c212be00a673/original.pdf)
+
 ## Changing the Default Namespace
 
 To troubleshoot in a specific namespace (e.g., `alpha`):
@@ -227,6 +289,7 @@ complete -o default -F __start_kubectl k
 Add these to your `~/.bashrc` or equivalent for persistence.
 
 ## Example Workflow
+
 1. **Application Failure**:
    - Test web service accessibility:
      ```bash
@@ -254,7 +317,20 @@ Add these to your `~/.bashrc` or equivalent for persistence.
      ```
    - Inspect logs for control plane components and fix certificate or manifest path issues.
 
-3. **Deployment Issues**:
+3. **Worker Node Failure**:
+   - Check node status and conditions:
+     ```bash
+     kubectl get nodes
+     kubectl describe node worker-1
+     ```
+   - Investigate kubelet logs, certificates, and API server connectivity:
+     ```bash
+     sudo journalctl -u kubelet
+     openssl x509 -in /var/lib/kubelet/kubelet.crt -text -noout
+     ```
+   - Correct configuration files (e.g., `/etc/kubernetes/kubelet.conf`) and restart kubelet.
+
+4. **Deployment Issues**:
    - Verify deployment, ReplicaSet, and pod events:
      ```bash
      kubectl describe deployment webapp-mysql
@@ -264,4 +340,4 @@ Add these to your `~/.bashrc` or equivalent for persistence.
    - Debug scheduler or controller-manager logs if pods are pending or scaling fails.
 
 ## Conclusion
-Troubleshooting Kubernetes applications and control plane issues requires a systematic approach, from checking service accessibility and pod logs to verifying control plane components and deployment events. By validating configurations, selectors, environment variables, and control plane health, you can diagnose and resolve issues effectively. Tools like autocompletion and official documentation further streamline the process for managing complex Kubernetes clusters.
+Troubleshooting Kubernetes requires a systematic approach, covering application failures, control plane issues, and worker node problems. By validating configurations, checking logs, verifying certificates, and ensuring proper connectivity, you can diagnose and resolve issues effectively. Tools like autocompletion and official documentation streamline the process for managing complex Kubernetes clusters.
