@@ -263,7 +263,7 @@ A worker node is malfunctioning, affecting pod scheduling or cluster operations.
 
 6. **Further Resources**:
    Refer to the Kubernetes CKA Troubleshooting Guide for detailed steps:
-   - [Kubernetes CKA Troubleshooting PDF](https://att-c.udemycdn.com/2022-06-03_04-37-44-661251794b1c0b279794c212be00a673/original.pdf)
+   - [Kubernetes CKA Troubleshooting PDF](https://att-c.udemycdn.com/2022-06-03_04-37-44-661251794b1c0b279794c212be00a673/original.pdf?response-content-disposition=attachment%3B+filename%3DKubernetes-CKA-1000-Troubleshooting.pdf&Expires=1759494800&Signature=HwniWybOQXf~690wAZCiw~k-b0z4wPcaghNkpcyjcLKlsVuDFoka-ReOI9JcotJWg6XRZ-bSXDPtoftZ0QYXK1qaV-OyDM1x1uFw7Dnu1Rso5uX8in5IOdWWJAcjILpC0PKK-0SXbRpE8TZgORWytte46-5X6vj03hTQmR1BybMiCglUbfmly73ugeZZ73tj~bTAtvY137ozNoeP9hmmYac3Y11Qif5cg2QgytmqTwwT3Elf3KCA3gVm0nrjx2CcEfuPwefDozNCNovEyRbHuKEgd-50iYiUFP6GYMPYotAdVb-q01CJiV7RO2nWdJMIc1HxB5qugXAaL0tkGPWz2w__&Key-Pair-Id=K3MG148K9RIRF4 )
 
 ## Changing the Default Namespace
 
