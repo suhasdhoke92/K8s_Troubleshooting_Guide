@@ -1,6 +1,6 @@
-# TroubleshootingEssentials
+# K8s_Troubleshooting_Guide
 
-This repository provides a comprehensive guide to troubleshooting Kubernetes applications, control plane issues, and worker node failures. It covers debugging a two-tier application (web frontend and MySQL database), control plane components, deployment issues, and worker node problems, along with namespace management and autocompletion setup.
+This repository provides a comprehensive guide to troubleshooting Kubernetes applications, control plane issues, worker node failures, and network-related problems. It covers debugging a two-tier application (web frontend and MySQL database), control plane components, deployment issues, worker node problems, and network plugins, CoreDNS, and kube-proxy, along with namespace management and autocompletion setup.
 
 ## 1. Troubleshooting Application Failure
 
@@ -263,7 +263,186 @@ A worker node is malfunctioning, affecting pod scheduling or cluster operations.
 
 6. **Further Resources**:
    Refer to the Kubernetes CKA Troubleshooting Guide for detailed steps:
-   - [Kubernetes CKA Troubleshooting PDF](https://att-c.udemycdn.com/2022-06-03_04-37-44-661251794b1c0b279794c212be00a673/original.pdf?response-content-disposition=attachment%3B+filename%3DKubernetes-CKA-1000-Troubleshooting.pdf&Expires=1759494800&Signature=HwniWybOQXf~690wAZCiw~k-b0z4wPcaghNkpcyjcLKlsVuDFoka-ReOI9JcotJWg6XRZ-bSXDPtoftZ0QYXK1qaV-OyDM1x1uFw7Dnu1Rso5uX8in5IOdWWJAcjILpC0PKK-0SXbRpE8TZgORWytte46-5X6vj03hTQmR1BybMiCglUbfmly73ugeZZ73tj~bTAtvY137ozNoeP9hmmYac3Y11Qif5cg2QgytmqTwwT3Elf3KCA3gVm0nrjx2CcEfuPwefDozNCNovEyRbHuKEgd-50iYiUFP6GYMPYotAdVb-q01CJiV7RO2nWdJMIc1HxB5qugXAaL0tkGPWz2w__&Key-Pair-Id=K3MG148K9RIRF4 )
+   - [Kubernetes CKA Troubleshooting PDF](https://att-c.udemycdn.com/2022-06-03_04-37-44-661251794b1c0b279794c212be00a673/original.pdf?response-content-disposition=attachment%3B+filename%3DKubernetes-CKA-1000-Troubleshooting.pdf&Expires=1759494800&Signature=HwniWybOQXf~690wAZCiw~k-b0z4wPcaghNkpcyjcLKlsVuDFoka-ReOI9JcotJWg6XRZ-bSXDPtoftZ0QYXK1qaV-OyDM1x1uFw7Dnu1Rso5uX8in5IOdWWJAcjILpC0PKK-0SXbRpE8TZgORWytte46-5X6vj03hTQmR1BybMiCglUbfmly73ugeZZ73tj~bTAtvY137ozNoeP9hmmYac3Y11Qif5cg2QgytmqTwwT3Elf3KCA3gVm0nrjx2CcEfuPwefDozNCNovEyRbHuKEgd-50iYiUFP6GYMPYotAdVb-q01CJiV7RO2nWdJMIc1HxB5qugXAaL0tkGPWz2w__&Key-Pair-Id=K3MG148K9RIRF4)
+
+## 4. Network Troubleshooting
+
+### Network Plugins in Kubernetes
+
+Kubernetes relies on Container Network Interface (CNI) plugins to manage pod networking. Common plugins include:
+
+1. **Weave Net**:
+   - Provides overlay networking and network policies.
+   - Installation:
+     ```bash
+     kubectl apply -f https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s.yaml
+     ```
+
+2. **Flannel**:
+   - Simple overlay network, suitable for basic networking needs.
+   - Installation:
+     ```bash
+     kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+     ```
+   - **Note**: Flannel does not support Kubernetes network policies.
+
+3. **Calico**:
+   - Advanced CNI plugin with support for network policies, encryption, and scalability.
+   - Installation:
+     ```bash
+     curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml -O
+     kubectl apply -f calico.yaml
+     ```
+
+**Note**:
+- In CKA/CKAD exams, you won’t need to install CNI plugins, but if required, the exact URL will be provided.
+- If multiple CNI configuration files exist in `/etc/cni/net.d/`, the kubelet uses the one that comes first lexicographically.
+- Refer to the Kubernetes documentation for more details:
+  - [Networking and Network Policy Add-ons](https://kubernetes.io/docs/concepts/cluster-administration/addons/#networking-and-network-policy)
+
+### DNS in Kubernetes
+
+Kubernetes uses **CoreDNS** as its cluster DNS server, providing flexible and extensible DNS resolution.
+
+#### CoreDNS Resources
+- **Service Account**: `coredns`
+- **Cluster Roles**: `coredns`, `kube-dns`
+- **Cluster Role Bindings**: `coredns`, `kube-dns`
+- **Deployment**: `coredns`
+- **ConfigMap**: `coredns`
+- **Service**: `kube-dns` (runs on port 53 for DNS resolution)
+
+#### CoreDNS Configuration
+The `Corefile` (defined in the `coredns` ConfigMap) contains key settings:
+```text
+kubernetes cluster.local in-addr.arpa ip6.arpa {
+   pods insecure
+   fallthrough in-addr.arpa ip6.arpa
+   ttl 30
+}
+```
+This configures CoreDNS for the `cluster.local` domain and reverse DNS lookups.
+
+```text
+proxy . /etc/resolv.conf
+```
+Forwards out-of-cluster DNS queries to the upstream DNS server defined in `/etc/resolv.conf`.
+
+#### Memory and Pods
+In large-scale clusters, CoreDNS memory usage depends on:
+- Number of pods and services.
+- Size of the DNS answer cache.
+- Query rate (QPS) per CoreDNS instance.
+
+#### Troubleshooting CoreDNS Issues
+1. **CoreDNS Pods in Pending State**:
+   - Verify the CNI plugin is installed and running:
+     ```bash
+     kubectl get pods -n kube-system -l k8s-app=weave-net
+     ```
+   - Ensure no network conflicts exist.
+
+2. **CoreDNS Pods in CrashLoopBackOff or Error State**:
+   - **SELinux Issue**: On nodes running older Docker versions with SELinux, CoreDNS may fail to start. Fixes:
+     - Upgrade Docker to a newer version.
+     - Disable SELinux (not recommended for production):
+       ```bash
+       sudo setenforce 0
+       ```
+     - Modify the CoreDNS deployment to allow privilege escalation:
+       ```bash
+       kubectl -n kube-system get deployment coredns -o yaml | \
+       sed 's/allowPrivilegeEscalation: false/allowPrivilegeEscalation: true/g' | \
+       kubectl apply -f -
+       ```
+   - **Loop Detection**: CoreDNS may detect a DNS loop. Fixes:
+     - Specify an alternate `resolv.conf` in kubelet config:
+       ```yaml
+       resolvConf: /run/systemd/resolve/resolv.conf
+       ```
+     - Disable the local DNS cache on host nodes and restore `/etc/resolv.conf`.
+     - Update the CoreDNS `Corefile` to use an upstream DNS server:
+       ```text
+       forward . 8.8.8.8
+       ```
+       Edit the ConfigMap:
+       ```bash
+       kubectl edit configmap coredns -n kube-system
+       ```
+
+3. **Verify kube-dns Service**:
+   Check if the `kube-dns` service has valid endpoints:
+   ```bash
+   kubectl get endpoints kube-dns -n kube-system
+   ```
+   If no endpoints exist, inspect the service:
+   ```bash
+   kubectl describe service kube-dns -n kube-system
+   ```
+   Ensure selectors and ports match the CoreDNS deployment.
+
+### Kube-Proxy
+
+**Kube-proxy** is a network proxy running on each node, managing network rules for service-to-pod communication.
+
+#### Configuration
+In clusters created with `kubeadm`, kube-proxy runs as a DaemonSet:
+```bash
+kubectl describe daemonset kube-proxy -n kube-system
+```
+The kube-proxy binary uses:
+```text
+Command:
+/usr/local/bin/kube-proxy
+--config=/var/lib/kube-proxy/config.conf
+--hostname-override=$(NODE_NAME)
+```
+- **Config File**: `/var/lib/kube-proxy/config.conf` defines settings like `clusterCIDR`, mode (`iptables` or `ipvs`), and bind address.
+- **Kubeconfig**: Specified in the config map for authentication.
+
+#### Troubleshooting Kube-Proxy Issues
+1. **Check Kube-Proxy Pods**:
+   Verify kube-proxy is running:
+   ```bash
+   kubectl get pods -n kube-system -l k8s-app=kube-proxy
+   ```
+
+2. **Check Logs**:
+   Inspect kube-proxy logs:
+   ```bash
+   kubectl logs -l k8s-app=kube-proxy -n kube-system
+   ```
+
+3. **Verify ConfigMap**:
+   Ensure the kube-proxy ConfigMap is correctly defined:
+   ```bash
+   kubectl describe configmap kube-proxy -n kube-system
+   ```
+
+4. **Check Kube-Proxy Process**:
+   Verify kube-proxy is running inside the container:
+   ```bash
+   netstat -plan | grep kube-proxy
+   ```
+   Example output:
+   ```text
+   tcp        0      0 0.0.0.0:30081           0.0.0.0:*               LISTEN      1/kube-proxy
+   tcp        0      0 127.0.0.1:10249         0.0.0.0:*               LISTEN      1/kube-proxy
+   tcp6       0      0 :::10256                :::*                    LISTEN      1/kube-proxy
+   ```
+
+5. **Common Issues**:
+   - Incorrect configuration in `/var/lib/kube-proxy/config.conf`.
+   - Missing or invalid kubeconfig in the ConfigMap.
+   - Restart kube-proxy if needed:
+     ```bash
+     kubectl delete pod -l k8s-app=kube-proxy -n kube-system
+     ```
+
+### References
+- [Debug Service Issues](https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/)
+- [DNS Troubleshooting](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/)
+- [Kubernetes CKA Troubleshooting PDF](https://att-c.udemycdn.com/2022-06-03_04-37-44-661251794b1c0b279794c212be00a673/original.pdf)
 
 ## Changing the Default Namespace
 
@@ -330,14 +509,21 @@ Add these to your `~/.bashrc` or equivalent for persistence.
      ```
    - Correct configuration files (e.g., `/etc/kubernetes/kubelet.conf`) and restart kubelet.
 
-4. **Deployment Issues**:
-   - Verify deployment, ReplicaSet, and pod events:
+4. **Network Failure**:
+   - Verify CNI plugin status:
      ```bash
-     kubectl describe deployment webapp-mysql
-     kubectl describe replicaset -l app=webapp-mysql
-     kubectl describe pod -l app=webapp-mysql
+     kubectl get pods -n kube-system -l k8s-app=weave-net
      ```
-   - Debug scheduler or controller-manager logs if pods are pending or scaling fails.
+   - Check CoreDNS pods and service:
+     ```bash
+     kubectl get pods -n kube-system -l k8s-app=kube-dns
+     kubectl get endpoints kube-dns -n kube-system
+     ```
+   - Inspect kube-proxy configuration and logs:
+     ```bash
+     kubectl describe daemonset kube-proxy -n kube-system
+     kubectl logs -l k8s-app=kube-proxy -n kube-system
+     ```
 
 ## Conclusion
-Troubleshooting Kubernetes requires a systematic approach, covering application failures, control plane issues, and worker node problems. By validating configurations, checking logs, verifying certificates, and ensuring proper connectivity, you can diagnose and resolve issues effectively. Tools like autocompletion and official documentation streamline the process for managing complex Kubernetes clusters.
+Troubleshooting Kubernetes requires a systematic approach, covering application failures, control plane issues, worker node problems, and network issues. By validating configurations, checking logs, verifying certificates, and ensuring proper network connectivity, you can diagnose and resolve issues effectively. Tools like autocompletion and official Kubernetes documentation streamline the process for managing complex clusters.
